@@ -1,9 +1,9 @@
 package main
+
 import (
-	"atlus-service/cmd"
-	orm "atlus-service/database"
-	router "atlus-service/route"
+	"atlas-service/cmd"
 )
+
 func main() {
 	cmd.Execute()
 }

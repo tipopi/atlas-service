@@ -1,6 +1,7 @@
 package zk
 
 import (
+	"atlas-service/pkg/api/obs"
 	"errors"
 	"fmt"
 	zk "github.com/samuel/go-zookeeper/zk"
@@ -12,18 +13,22 @@ import (
 type Client struct {
 	client    *zk.Conn
 	waitIndex uint64
+	obs.AsyncEventBus
+	WatchHandler
 }
 type WatchHandler interface {
-
+	nodeCreate(EventNodeCreated)
+	nodeDeleted(EventNodeDeleted)
+	nodeDataChanged(EventNodeDataChanged)
+	nodeChildrenChanged(EventNodeChildrenChanged)
 }
-
 
 func New(machines []string) (*Client, error) {
 	zkClient, _, err := zk.Connect(machines, time.Second)
 	if err != nil {
 		return nil, err
 	}
-	return &Client{zkClient, 0}, nil
+	return &Client{client: zkClient, waitIndex: 0}, nil
 }
 
 func (c *Client) Get(path string) ([]byte, error) {
@@ -34,11 +39,12 @@ func (c *Client) Get(path string) ([]byte, error) {
 	return resp, nil
 }
 
-func (c *Client) GetString(path string) (s string,err error) {
-	bytes,err:=c.Get(path)
-	s=*(*string)(unsafe.Pointer(&bytes))
+func (c *Client) GetString(path string) (s string, err error) {
+	bytes, err := c.Get(path)
+	s = *(*string)(unsafe.Pointer(&bytes))
 	return
 }
+
 //深度搜索叶子
 func nodeWalk(prefix string, c *Client, vars map[string]string) error {
 	l, stat, err := c.client.Children(prefix)
@@ -67,13 +73,12 @@ func nodeWalk(prefix string, c *Client, vars map[string]string) error {
 				}
 				vars[s] = string(b)
 			} else {
-				nodeWalk(s, c, vars)
+				return nodeWalk(s, c, vars)
 			}
 		}
 	}
 	return nil
 }
-
 
 func (c *Client) GetValues(key string, keys []string) (map[string]string, error) {
 	vars := make(map[string]string)
@@ -94,7 +99,6 @@ func (c *Client) GetValues(key string, keys []string) (map[string]string, error)
 	}
 	return vars, nil
 }
-
 
 func (c *Client) createParents(key string) error {
 	flags := int32(0)
@@ -117,16 +121,16 @@ func (c *Client) createParents(key string) error {
 	return nil
 }
 func (c *Client) CreateParentNode(node string) (err error) {
-	exists,_,err:=c.client.Exists(node)
-	if !exists{
+	exists, _, err := c.client.Exists(node)
+	if !exists {
 		_, err = c.client.Create(node, nil, 0, zk.WorldACL(zk.PermAll))
 		//fmt.Print(err)
 	}
 	return
 }
-func (c *Client) CreateNode( node string,data string) (err error) {
-	exists,_,err:=c.client.Exists(node)
-	if !exists{
+func (c *Client) CreateNode(node string, data string) (err error) {
+	exists, _, err := c.client.Exists(node)
+	if !exists {
 		_, err = c.client.Create(node, []byte(data), 0, zk.WorldACL(zk.PermAll))
 		fmt.Print(err)
 	}
@@ -136,7 +140,7 @@ func (c *Client) GetChildren(parentNode string) (list []string, err error) {
 	list, _, err = c.client.Children(parentNode)
 	return
 }
-func (c *Client) Set(path string,newData string) (err error) {
+func (c *Client) Set(path string, newData string) (err error) {
 	_, sate, err := c.client.Get(path)
 	if err != nil {
 		return
@@ -149,17 +153,17 @@ func (c *Client) Set(path string,newData string) (err error) {
 	return
 }
 
-func (c *Client) CreateOrSetChildren( node string,data string) (err error) {
-	exists,_,err:=c.client.Exists(node)
-	if !exists{
-		err=c.CreateNode(node,data)
-	}else {
-		err=c.Set(node,data)
+func (c *Client) CreateOrSetChildren(node string, data string) (err error) {
+	exists, _, err := c.client.Exists(node)
+	if !exists {
+		err = c.CreateNode(node, data)
+	} else {
+		err = c.Set(node, data)
 	}
 	return
 }
 
-func  (c *Client)  DeleteNode(path string) (err error) {
+func (c *Client) DeleteNode(path string) (err error) {
 	_, sate, _ := c.client.Get(path)
 	err = c.client.Delete(path, sate.Version)
 	if err != nil {
@@ -168,18 +172,24 @@ func  (c *Client)  DeleteNode(path string) (err error) {
 	return
 }
 
-func (c *Client) Watch(path string, stop chan bool)  {
-
-	go func(){
-		for{
-			_,_,e,_:=c.client.GetW(path)
-			event:=<-e
+func (c *Client) Watch(path string) {
+	go func() {
+		for {
+			_, _, e, _ := c.client.GetW(path)
+			event := <-e
+			var k interface{}
 			switch event.Type {
 			case zk.EventNodeCreated:
-
+				k = EventNodeCreated(path)
+			case zk.EventNodeDeleted:
+				k = EventNodeDeleted(path)
+			case zk.EventNodeDataChanged:
+				k = EventNodeDataChanged(path)
+			case zk.EventNodeChildrenChanged:
+				k = EventNodeChildrenChanged(path)
 			}
+			c.PostWithObs(k, c.WatchHandler)
 		}
 	}()
-
 
 }
