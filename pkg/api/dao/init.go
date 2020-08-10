@@ -1,14 +1,13 @@
 package dao
 
 import (
-	"atlus-service/pkg/api/log"
+	"atlas-service/pkg/api/log"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 	"github.com/spf13/viper"
-
 )
 
 var (
@@ -17,7 +16,6 @@ var (
 
 const DRIVER_MYSQL = "mysql"
 const DRIVER_SQLITE = "sqlite"
-
 
 func Setup() {
 	var err error

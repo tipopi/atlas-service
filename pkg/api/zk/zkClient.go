@@ -17,10 +17,10 @@ type Client struct {
 	WatchHandler
 }
 type WatchHandler interface {
-	nodeCreate(EventNodeCreated)
-	nodeDeleted(EventNodeDeleted)
-	nodeDataChanged(EventNodeDataChanged)
-	nodeChildrenChanged(EventNodeChildrenChanged)
+	NodeCreate(EventNodeCreated)
+	NodeDeleted(EventNodeDeleted)
+	NodeDataChanged(EventNodeDataChanged)
+	NodeChildrenChanged(EventNodeChildrenChanged)
 }
 
 func New(machines []string) (*Client, error) {
@@ -29,6 +29,13 @@ func New(machines []string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{client: zkClient, waitIndex: 0}, nil
+}
+func NewWithHandler(machines []string, handler WatchHandler) (*Client, error) {
+	zkClient, _, err := zk.Connect(machines, time.Second)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{client: zkClient, waitIndex: 0, WatchHandler: handler}, nil
 }
 
 func (c *Client) Get(path string) ([]byte, error) {
