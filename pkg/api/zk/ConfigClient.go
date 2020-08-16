@@ -1,7 +1,6 @@
 package zk
 
 import (
-	"atlas-service/pkg/api/zk/Handler"
 	"strings"
 )
 
@@ -11,7 +10,7 @@ var (
 
 func SetConfig(hosts string, path string) ([]byte, error) {
 
-	config, err := NewWithHandler(strings.Split(hosts, ","), &Handler.ConfigHandler{})
+	config, err := NewWithHandler(strings.Split(hosts, ","), &ConfigHandler{})
 	if err != nil {
 		return nil, err
 	}

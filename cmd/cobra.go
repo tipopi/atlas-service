@@ -1,10 +1,9 @@
 package cmd
 
-
 import (
+	"atlas-service/cmd/api"
 	"github.com/spf13/cobra"
 	"os"
-	"atlus-service/cmd/api"
 )
 
 var rootCmd = &cobra.Command{
@@ -23,7 +22,6 @@ func init() {
 
 //Execute : run commands
 func Execute() {
-	//todo:设置自杀机制
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(-1)
 	}

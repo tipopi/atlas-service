@@ -2,6 +2,7 @@ package api
 
 import (
 	"atlas-service/pkg/api/dao"
+	error2 "atlas-service/pkg/api/error"
 	"atlas-service/pkg/api/log"
 	"atlas-service/pkg/api/router"
 	"atlas-service/pkg/api/zk"
@@ -47,9 +48,9 @@ func init() {
 	StartCmd.PersistentFlags().Uint8VarP(&loglevel, "loglevel", "l", 0, "Log level")
 	StartCmd.PersistentFlags().BoolVarP(&cors, "cors", "x", false, "Enable cors headers")
 	StartCmd.PersistentFlags().BoolVarP(&cluster, "cluster", "s", false, "cluster-alone mode or distributed mod")
-	StartCmd.PersistentFlags().BoolVarP(&useZk, "useZk", "uz", false, "config mode : zk mode:true ; local mode:false")
-	StartCmd.PersistentFlags().StringVarP(&zkHost, "zkHost", "zh", "", "Zk host of configuration center")
-	StartCmd.PersistentFlags().StringVarP(&zkPath, "zkPath", "zp", "/atlas/config", "Zk path of configuration center")
+	StartCmd.PersistentFlags().BoolVarP(&useZk, "useZk", "u", false, "config mode : zk mode:true ; local mode:false")
+	StartCmd.PersistentFlags().StringVarP(&zkHost, "zkHost", "", "", "Zk host of configuration center")
+	StartCmd.PersistentFlags().StringVarP(&zkPath, "zkPath", "", "/atlas/config", "Zk path of configuration center")
 }
 
 func run() error {
@@ -74,18 +75,22 @@ func ConfigSetup() {
 	if useZk {
 		zkLoad()
 	} else {
-
+		localLoad()
 	}
-
 }
 func loadError() {
 	if r := recover(); r != nil {
 		switch r.(type) {
-		case viper.ConfigFileNotFoundError:
+		case error2.ZkConfigError:
+			log.Error(r.(error).Error())
 			localLoad()
+		default:
+			panic(r)
 		}
 	}
 }
+
+//基本config
 func localLoad() {
 	viper.SetConfigFile(config)
 	content, err := ioutil.ReadFile(config)
@@ -99,24 +104,25 @@ func localLoad() {
 	}
 }
 func zkLoad() {
+	e := func(err error) {
+		panic(error2.ZkConfigError{Msg: err.Error()})
+	}
 	if zkHost != "" {
 		viper.Set("config-center.host", zkHost)
 		viper.Set("config-center.path", zkPath)
 	} else {
-		viper.SetConfigFile("./config/zkconfig.yaml")
-		if err := viper.ReadInConfig(); err != nil {
-			panic(err)
-		}
+		viper.SetConfigFile("./config/zkConfig.yaml")
+		err := viper.ReadInConfig()
+		error2.CheckError(err, false, e)
 	}
 	host := viper.GetString("config-center.host")
 	path := viper.GetString("config-center.path")
 	//连接zk
 	config, err := zk.SetConfig(host, path)
-	if err != nil {
-		panic(err)
-	}
-	viper.SetConfigType("json")
+	error2.CheckError(err, false, e)
+	viper.SetConfigType("yaml")
 	err = viper.ReadConfig(bytes.NewBuffer(config))
+	error2.CheckError(err, false, e)
 
 }
 func setup() {
