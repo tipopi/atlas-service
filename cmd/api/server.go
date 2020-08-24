@@ -1,13 +1,13 @@
 package api
 
 import (
-	"atlas-service/pkg/api/dao"
 	error2 "atlas-service/pkg/api/error"
 	"atlas-service/pkg/api/log"
 	"atlas-service/pkg/api/router"
 	"atlas-service/pkg/api/zk"
 	"bytes"
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -43,7 +43,7 @@ var (
 )
 
 func init() {
-	StartCmd.PersistentFlags().StringVarP(&config, "config", "c", "./config/in-local.yaml", "Start server with provided configuration file")
+	StartCmd.PersistentFlags().StringVarP(&config, "config", "c", "./config/local.json", "Start server with provided configuration file")
 	StartCmd.PersistentFlags().StringVarP(&port, "port", "p", "8080", "Tcp port server listening on")
 	StartCmd.PersistentFlags().Uint8VarP(&loglevel, "loglevel", "l", 0, "Log level")
 	StartCmd.PersistentFlags().BoolVarP(&cors, "cors", "x", false, "Enable cors headers")
@@ -80,6 +80,7 @@ func ConfigSetup() {
 }
 func loadError() {
 	if r := recover(); r != nil {
+		zk.GetConfig().Close()
 		switch r.(type) {
 		case error2.ZkConfigError:
 			log.Error(r.(error).Error())
@@ -102,6 +103,11 @@ func localLoad() {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Parse config file fail: %s", err.Error()))
 	}
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		//viper配置发生变化了 执行响应的操作
+		log.Info(viper.GetString("test"))
+	})
 }
 func zkLoad() {
 	e := func(err error) {
@@ -120,7 +126,7 @@ func zkLoad() {
 	//连接zk
 	config, err := zk.SetConfig(host, path)
 	error2.CheckError(err, false, e)
-	viper.SetConfigType("yaml")
+	viper.SetConfigType("json")
 	err = viper.ReadConfig(bytes.NewBuffer(config))
 	error2.CheckError(err, false, e)
 
@@ -128,10 +134,9 @@ func zkLoad() {
 func setup() {
 	zerolog.SetGlobalLevel(zerolog.Level(loglevel))
 	ConfigSetup()
-
 	//3.Set up run mode
 	mode := viper.GetString("mode")
 	gin.SetMode(mode)
 	//4.Set up database connection
-	dao.Setup()
+	//dao.Setup()
 }

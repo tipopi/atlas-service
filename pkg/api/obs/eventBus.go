@@ -1,15 +1,19 @@
 package obs
 
-import "reflect"
+import (
+	"reflect"
+)
 
 type EventBus struct {
 	ObserverRegistry
 }
 
+var eventBus *EventBus
+
 var runFunc = run
 
-func (eventBus *EventBus) Register(observer interface{}) {
-	eventBus.registry(observer)
+func (eventBus *EventBus) Register(observer interface{}) error {
+	return eventBus.registry(observer)
 }
 
 func (eventBus *EventBus) Post(event interface{}) {
@@ -22,7 +26,7 @@ func (eventBus *EventBus) Post(event interface{}) {
 func (eventBus *EventBus) PostWithObs(event interface{}, obs interface{}) {
 	t := reflect.TypeOf(obs)
 	for _, action := range eventBus.getObserverActions(event) {
-		if reflect.TypeOf(action.target) == t {
+		if action.target == t {
 			runFunc(action, event)
 		}
 	}
@@ -30,4 +34,10 @@ func (eventBus *EventBus) PostWithObs(event interface{}, obs interface{}) {
 
 func run(action ObserverAction, event interface{}) {
 	action.execute(event)
+}
+func GetEventBus() *EventBus {
+	if eventBus == nil {
+		eventBus = &EventBus{ObserverRegistry{m: make(map[reflect.Type][]ObserverAction)}}
+	}
+	return eventBus
 }

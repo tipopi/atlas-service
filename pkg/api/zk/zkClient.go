@@ -1,6 +1,7 @@
 package zk
 
 import (
+	"atlas-service/pkg/api/log"
 	"atlas-service/pkg/api/obs"
 	"errors"
 	"fmt"
@@ -11,10 +12,9 @@ import (
 )
 
 type Client struct {
-	client    *zk.Conn
-	waitIndex uint64
-	obs.AsyncEventBus
-	WatchHandler
+	client       *zk.Conn
+	waitIndex    uint64
+	WatchHandler WatchHandler
 }
 type WatchHandler interface {
 	NodeCreate(EventNodeCreated)
@@ -31,7 +31,7 @@ func New(machines []string) (*Client, error) {
 	return &Client{client: zkClient, waitIndex: 0}, nil
 }
 func NewWithHandler(machines []string, handler WatchHandler) (*Client, error) {
-	zkClient, _, err := zk.Connect(machines, time.Second)
+	zkClient, _, err := zk.Connect(machines, 20*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -178,25 +178,35 @@ func (c *Client) DeleteNode(path string) (err error) {
 	}
 	return
 }
-
+func (c *Client) EventRegistry() error {
+	return obs.GetAsyncEventBus().Register(c.WatchHandler)
+}
 func (c *Client) Watch(path string) {
 	go func() {
 		for {
-			_, _, e, _ := c.client.GetW(path)
+			_, _, e, err := c.client.GetW(path)
+			if err != nil {
+				log.Error(err.Error())
+			}
 			event := <-e
 			var k interface{}
+			base := BaseEvent{path, c}
 			switch event.Type {
 			case zk.EventNodeCreated:
-				k = EventNodeCreated(path)
+				k = EventNodeCreated{base}
 			case zk.EventNodeDeleted:
-				k = EventNodeDeleted(path)
+				k = EventNodeDeleted{base}
 			case zk.EventNodeDataChanged:
-				k = EventNodeDataChanged(path)
+				k = EventNodeDataChanged{base}
 			case zk.EventNodeChildrenChanged:
-				k = EventNodeChildrenChanged(path)
+				k = EventNodeChildrenChanged{base}
 			}
-			c.PostWithObs(k, c.WatchHandler)
+			obs.GetAsyncEventBus().PostWithObs(k, c.WatchHandler)
 		}
 	}()
 
+}
+
+func (c *Client) Close() {
+	c.client.Close()
 }

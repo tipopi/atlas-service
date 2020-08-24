@@ -1,6 +1,9 @@
 package obs
 
 import (
+	"atlas-service/pkg/api/log"
+	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -12,25 +15,43 @@ type ObserverRegistry struct {
 	m map[reflect.Type][]ObserverAction
 }
 
-func (o *ObserverRegistry) registry(observer interface{}) {
+func (o *ObserverRegistry) registry(observer interface{}) error {
+	var err error
+	defer func() {
+		if r := recover(); r != nil {
+			switch r.(type) {
+			case error:
+				err = r.(error)
+			case string:
+				err = errors.New(r.(string))
+			default:
+				err = errors.New("unknown exception")
+			}
+			log.Error(err.Error())
+		}
+	}()
+	if o.m == nil {
+		o.m = make(map[reflect.Type][]ObserverAction)
+	}
 	for eventType, eventAction := range buildActions(observer) {
 		var actions []ObserverAction
+		actions = o.m[eventType]
 		var exit bool
-		if actions, exit = o.m[eventType]; !exit {
+		o.Lock()
+		if _, exit = o.m[eventType]; !exit {
 			a := make([]ObserverAction, 0, 10)
-			o.Lock()
 			o.m[eventType] = a
-			o.Unlock()
-			actions = a
 		}
-		actions = append(actions, eventAction...)
+		o.m[eventType] = append(actions, eventAction...)
+		o.Unlock()
 	}
+	return err
 }
 
 //向外部提供此event下的actions
 func (o *ObserverRegistry) getObserverActions(event interface{}) []ObserverAction {
 	o.RLock()
-	defer o.Unlock()
+	defer o.RUnlock()
 	//精准匹配，暂时不考虑类型组合
 	return o.m[reflect.TypeOf(event)]
 }
@@ -43,14 +64,13 @@ func buildActions(observer interface{}) map[reflect.Type][]ObserverAction {
 		//获取方法第一个参数
 		eventType := method.Type().In(0)
 		var actions []ObserverAction
+		actions = actionMap[eventType]
 		var exit bool
-		if actions, exit = actionMap[eventType]; !exit {
+		if _, exit = actionMap[eventType]; !exit {
 			a := make([]ObserverAction, 0, 10)
 			actionMap[eventType] = a
-			actions = a
 		}
-		actions = append(actions, ObserverAction{t, method})
-
+		actionMap[eventType] = append(actions, ObserverAction{t, method})
 	}
 	return actionMap
 }
@@ -59,23 +79,32 @@ func buildActions(observer interface{}) map[reflect.Type][]ObserverAction {
 func getMethod(observer interface{}) []reflect.Value {
 	v := reflect.ValueOf(observer)
 	//判断是函数
-	if v.Kind() == reflect.Func {
+
+	fv := v
+	switch v.Kind() {
+	case reflect.Func:
 		return []reflect.Value{v}
+	case reflect.Ptr:
+		fv = v.Elem()
+	case reflect.Struct:
+	default:
+		panic("Type error: Please input struct or function")
 	}
 	//默认订阅
-	m := v.MethodByName("subscribe")
+	m := v.MethodByName("Subscribe")
 	methods := make([]reflect.Value, 0, 10)
-	if !m.IsNil() {
+	if m.IsValid() {
 		methods = append(methods, m)
 	}
-	//获取tag上的自定义订阅
-	if filed, exit := v.Type().FieldByName("subscribeMethod"); exit {
+
+	//获取tag上的自定义订阅 todo:找不到字段会panic
+	if filed, exit := fv.Type().FieldByName("SubscribeMethod"); exit {
 		if tags, tagExit := filed.Tag.Lookup("methods"); tagExit {
 			tagValues := strings.Split(tags, ",")
 			for _, value := range tagValues {
 				method := v.MethodByName(value)
-				if method.IsNil() {
-					//has error
+				if !method.IsValid() {
+					log.Error(fmt.Sprintf("The observer does not have this method:%s", value))
 					continue
 				}
 				methods = append(methods, method)

@@ -1,8 +1,12 @@
 package obs
 
+import "reflect"
+
 type AsyncEventBus struct {
 	EventBus //组合
 }
+
+var asyncEventBus *AsyncEventBus
 
 func (eventBus *AsyncEventBus) Post(event interface{}) {
 	runFunc = asyncRun
@@ -16,4 +20,10 @@ func (eventBus *AsyncEventBus) PostWithObs(event interface{}, obs interface{}) {
 
 func asyncRun(action ObserverAction, event interface{}) {
 	go action.execute(event)
+}
+func GetAsyncEventBus() *AsyncEventBus {
+	if asyncEventBus == nil {
+		asyncEventBus = &AsyncEventBus{EventBus{ObserverRegistry{m: make(map[reflect.Type][]ObserverAction)}}}
+	}
+	return asyncEventBus
 }

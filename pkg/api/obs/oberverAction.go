@@ -8,7 +8,6 @@ type ObserverAction struct {
 }
 
 func (o *ObserverAction) execute(event interface{}) {
-	input := make([]reflect.Value, 1)
-	input = append(input, reflect.ValueOf(event))
+	input := []reflect.Value{reflect.ValueOf(event)}
 	o.method.Call(input)
 }

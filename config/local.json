@@ -1,0 +1,25 @@
+{
+  "mode": "debug",
+  "cors":{},
+  "database": {
+    "driver": "mysql",
+    "mysql": {
+      "charset": "utf8",
+      "host": "127.0.0.1:3306",
+      "name": "atlas",
+      "user": "root",
+      "password": "123456",
+      "pool":{
+        "max": 20,
+        "min": 5
+      },
+      "ssl": false
+    },
+    "sqlite": {
+      "dsn": "data/zeus.db"
+    }
+  },
+  "test":1
+
+}
+
