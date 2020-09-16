@@ -26,7 +26,6 @@ var (
 	useZk    bool
 	zkHost   string
 	zkPath   string
-	//StartCmd : set up restful api server
 	StartCmd = &cobra.Command{
 		Use:     "server",
 		Short:   "Start atlas API server",
@@ -58,6 +57,7 @@ func run() error {
 	router.SetUp(engine)
 	return engine.Run(":" + port)
 }
+
 func usage() {
 	usageStr := `
     _       _____    _         _      ____     
@@ -70,6 +70,7 @@ U  /"\  u  |_ " _|  |"|    U  /"\  u / __"| u
 `
 	fmt.Printf("%s\n", usageStr)
 }
+
 func ConfigSetup() {
 	defer loadError()
 	if useZk {
@@ -78,6 +79,7 @@ func ConfigSetup() {
 		localLoad()
 	}
 }
+
 func loadError() {
 	if r := recover(); r != nil {
 		zk.GetConfig().Close()
@@ -98,7 +100,6 @@ func localLoad() {
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Read config file fail: %s", err.Error()))
 	}
-	//Replace environment variables
 	err = viper.ReadConfig(strings.NewReader(os.ExpandEnv(string(content))))
 	if err != nil {
 		log.Fatal(fmt.Sprintf("Parse config file fail: %s", err.Error()))
@@ -109,6 +110,7 @@ func localLoad() {
 		log.Info(viper.GetString("test"))
 	})
 }
+
 func zkLoad() {
 	e := func(err error) {
 		panic(error2.ZkConfigError{Msg: err.Error()})
@@ -129,14 +131,13 @@ func zkLoad() {
 	viper.SetConfigType("json")
 	err = viper.ReadConfig(bytes.NewBuffer(config))
 	error2.CheckError(err, false, e)
-
 }
+
 func setup() {
 	zerolog.SetGlobalLevel(zerolog.Level(loglevel))
 	ConfigSetup()
-	//3.Set up run mode
 	mode := viper.GetString("mode")
 	gin.SetMode(mode)
-	//4.Set up database connection
+
 	//dao.Setup()
 }
